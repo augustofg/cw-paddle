@@ -30,10 +30,6 @@
     movf    PCLATH,w            ; move pclath register into w register
     movwf   pclath_save         ; save off contents of PCLATH register
 
-    movwf   w_save
-    movf    STATUS, W
-    movwf   status_save
-
     banksel PIR1                ; Clear Timer 1 interrupt flag
     bcf     PIR1, TMR1IF
 
