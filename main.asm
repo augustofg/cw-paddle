@@ -3,13 +3,8 @@
 
     __CONFIG _CONFIG, _LP_OSC & _WDT_OFF & _MCLRE_OFF & _BOREN_ON & _CP_OFF & _CPD_OFF & _PWRTE_OFF
 
-    #define PAUSE_STATE 0x00
-    #define DIT_STATE   0x01
-    #define DAH_STATE1  0x02
-    #define DAH_STATE2  0x03
-    #define DAH_STATE3  0x04
-
     #define cw_key_gpio GPIO,0
+    #define cw_key_trisio TRISIO,0
     #define dit_paddle_gpio GPIO,3
     #define dah_paddle_gpio GPIO,2
 
@@ -19,7 +14,7 @@
     pclath_save
     tmp1
     tmp2
-    dit_dah_fsm
+    dit_dah_cycle
     dit_cnt_l
     dit_cnt_h
     endc
@@ -29,109 +24,72 @@
 
     org 0x0004
 
-    movwf   w_save            ; save off current W register contents
-    movf    STATUS,w          ; move status register into W register
-    movwf   status_save       ; save off contents of STATUS register
-    movf    PCLATH,w      ; move pclath register into w register
-    movwf   pclath_save      ; save off contents of PCLATH register
+    movwf   w_save              ; save off current W register contents
+    movf    STATUS,w            ; move status register into W register
+    movwf   status_save         ; save off contents of STATUS register
+    movf    PCLATH,w            ; move pclath register into w register
+    movwf   pclath_save         ; save off contents of PCLATH register
 
     movwf   w_save
     movf    STATUS, W
     movwf   status_save
 
-    banksel PIR1
+    banksel PIR1                ; Clear Timer 1 interrupt flag
     bcf     PIR1, TMR1IF
 
-    movf    dit_cnt_l, w
+    movf    dit_cnt_l, w        ; Reload Timer 1 counter
     addwf   TMR1L,f
     btfsc   STATUS, C
     incf    TMR1H, f
     movf    dit_cnt_h, w
     addwf   TMR1H, f
 
-    movlw   PAUSE_STATE
-    xorwf   dit_dah_fsm, W
+    movlw   0
+    xorwf   dit_dah_cycle, W
     btfss   STATUS, Z
-    goto    end_pause_state
+    goto    wait_dit_dah_finish
     bcf     cw_key_gpio
 
-    movlw   PAUSE_STATE
+    movlw   0
 
     btfss   dit_paddle_gpio
-    movlw   DIT_STATE
+    movlw   1
 
     btfss   dah_paddle_gpio
-    movlw   DAH_STATE1
+    movlw   3
 
-    movwf   dit_dah_fsm
+    movwf   dit_dah_cycle
 
-    xorlw   PAUSE_STATE
+    xorlw   0
     btfss   STATUS, Z
     bsf     cw_key_gpio
 
     goto    end_dit_dah_fsm
-end_pause_state:
-
-    movlw   DIT_STATE
-    xorwf   dit_dah_fsm, W
-    btfss   STATUS, Z
-    goto    end_dit_state
+wait_dit_dah_finish:
+    decfsz  dit_dah_cycle, F
+    goto    end_dit_dah_fsm
     banksel GPIO
     bcf     cw_key_gpio
-    movlw   PAUSE_STATE
-    movwf   dit_dah_fsm
-    goto    end_dit_dah_fsm
-end_dit_state:
-
-    movlw   DAH_STATE1
-    xorwf   dit_dah_fsm, W
-    btfss   STATUS, Z
-    goto    end_dah_state1
-    movlw   DAH_STATE2
-    movwf   dit_dah_fsm
-    goto    end_dit_dah_fsm
-end_dah_state1:
-
-    movlw   DAH_STATE2
-    xorwf   dit_dah_fsm, W
-    btfss   STATUS, Z
-    goto    end_dah_state2
-    movlw   DAH_STATE3
-    movwf   dit_dah_fsm
-    goto    end_dit_dah_fsm
-end_dah_state2:
-
-    movlw   DAH_STATE3
-    xorwf   dit_dah_fsm, W
-    btfss   STATUS, Z
-    goto    end_dah_state3
-    bcf     cw_key_gpio
-    movlw   PAUSE_STATE
-    movwf   dit_dah_fsm
-    goto    end_dit_dah_fsm
-end_dah_state3:
-
 end_dit_dah_fsm:
 
-    movf    pclath_save,w     ; retrieve copy of PCLATH register
-    movwf   PCLATH        ; restore pre-isr PCLATH register contents
-    movf    status_save,w     ; retrieve copy of STATUS register
-    movwf   STATUS            ; restore pre-isr STATUS register contents
+    movf    pclath_save,w       ; retrieve copy of PCLATH register
+    movwf   PCLATH              ; restore pre-isr PCLATH register contents
+    movf    status_save,w       ; retrieve copy of STATUS register
+    movwf   STATUS              ; restore pre-isr STATUS register contents
     swapf   w_save,f
-    swapf   w_save,w          ; restore pre-isr W register contents
+    swapf   w_save,w            ; restore pre-isr W register contents
     retfie
 
 main:
     banksel TRISIO
-    movlw 0xFE
-    movwf TRISIO
+    bcf cw_key_trisio
     movlw (1 << TMR1IE)
     movwf PIE1
     banksel GPIO
 
-    movlw 0x00
-    movwf dit_dah_fsm
-    bcf GPIO, 0
+    movlw 0x00                  ; Initialize the dit dah cycle counter
+    movwf dit_dah_cycle
+    bcf cw_key_gpio
 
     call delay_250ms
 
