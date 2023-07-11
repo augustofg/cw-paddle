@@ -134,27 +134,29 @@ main:
 
     movlw   CAN_SLEEP_NO        ; Initialize sleep_ctrl flag
     movwf   sleep_ctrl
-    movlw 0x00                  ; Initialize the dit dah cycle counter
-    movwf dit_dah_cycle
-    bcf cw_key_gpio
 
-    movlw 0x12
-    call wpm_to_dit_cycles_table
+    movlw   0x00                ; Initialize the dit dah cycle counter
+    movwf   dit_dah_cycle
+
+    bcf     cw_key_gpio         ; CW key should start in OFF
+
+    movlw   0x12
+    call    wpm_to_dit_cycles_table
     banksel TMR1L
-    movwf dit_cnt_l
-    movwf TMR1L
+    movwf   dit_cnt_l
+    movwf   TMR1L
 
-    movlw 0x13
-    call wpm_to_dit_cycles_table
+    movlw   0x13
+    call    wpm_to_dit_cycles_table
     banksel TMR1H
-    movwf dit_cnt_h
-    movwf TMR1H
+    movwf   dit_cnt_h
+    movwf   TMR1H
 
     bcf     PIR1, TMR1IF
-    movlw (1 << PEIE) | (1 << GIE)
-    movwf INTCON
-    movlw (1 << TMR1ON)
-    movwf T1CON
+    movlw   (1 << PEIE) | (1 << GIE)
+    movwf   INTCON
+    movlw   (1 << TMR1ON)
+    movwf   T1CON
 
 stop:
     movf    sleep_ctrl, W
@@ -163,7 +165,7 @@ stop:
     nop                         ; Should be a sleep instruction here,
                                 ; but it seems that the wake-up is
                                 ; taking too long
-    goto stop
+    goto    stop
 
 wpm_to_dit_cycles_table:        ; 0x10000 - cycles, little endian, Fosc = 32.768 kHz
     addwf PCL, F
