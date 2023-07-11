@@ -14,8 +14,6 @@
     w_save
     status_save
     pclath_save
-    tmp1
-    tmp2
     dit_dah_cycle
     dit_cnt_l
     dit_cnt_h
@@ -96,8 +94,6 @@ main:
     movwf dit_dah_cycle
     bcf cw_key_gpio
 
-    call delay_250ms
-
     movlw 0x12
     call wpm_to_dit_cycles_table
     banksel TMR1L
@@ -118,20 +114,6 @@ main:
 
 stop:
     goto stop
-
-delay_250ms:
-    movlw 0x51
-    movwf tmp1
-    movlw 0x02
-    movwf tmp2
-loop:
-    decfsz tmp1, 1
-    goto loop
-    decfsz tmp2, 1
-    goto loop
-    nop
-    nop
-    return
 
 wpm_to_dit_cycles_table:        ; 0x10000 - cycles, little endian, Fosc = 32.768 kHz
     addwf PCL, F
