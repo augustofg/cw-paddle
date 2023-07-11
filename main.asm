@@ -34,6 +34,8 @@
     movf    PCLATH,w            ; move pclath register into w register
     movwf   pclath_save         ; save off contents of PCLATH register
 
+    banksel INTCON
+
     btfss   INTCON, GPIF        ; If the interrupt was caused by GPIO change, disable it
     goto    add_tmr1_cnt
     bcf     INTCON, GPIE
@@ -45,6 +47,7 @@
     goto    add_tmr1_cnt_end
 add_tmr1_cnt:
 
+    banksel TMR1L
     movf    dit_cnt_l, w        ; Reload Timer 1 counter (add)
     addwf   TMR1L, F
     incf    TMR1H, F
@@ -52,8 +55,7 @@ add_tmr1_cnt:
     addwf   TMR1H, F
 add_tmr1_cnt_end:
 
-    banksel PIR1                ; Clear Timer 1 interrupt flag
-    bcf     PIR1, TMR1IF
+    bcf     PIR1, TMR1IF        ; Clear Timer 1 interrupt flag
 
     movlw   0
     xorwf   dit_dah_cycle, W
@@ -80,6 +82,7 @@ add_tmr1_cnt_end:
     bsf     INTCON, GPIE
     goto    end_dit_dah_fsm
 start_dit_dah:
+    banksel sleep_ctrl
     movlw   CAN_SLEEP_NO
     movwf   sleep_ctrl
     bsf     cw_key_gpio
