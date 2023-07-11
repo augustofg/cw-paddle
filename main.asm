@@ -5,8 +5,10 @@
 
     #define cw_key_gpio GPIO,0
     #define cw_key_trisio TRISIO,0
-    #define dit_paddle_gpio GPIO,3
-    #define dah_paddle_gpio GPIO,2
+    #define dit_paddle_bit 1
+    #define dah_paddle_bit 2
+    #define dit_paddle_gpio GPIO,dit_paddle_bit
+    #define dah_paddle_gpio GPIO,dah_paddle_bit
 
     cblock 0x20
     w_save
@@ -81,7 +83,14 @@ main:
     bcf cw_key_trisio
     movlw (1 << TMR1IE)
     movwf PIE1
+    movlw   (1 << dit_paddle_bit) | (1 << dah_paddle_bit)
+    movwf   IOC                 ; Enable GPIO interrupt-on-change for the dit and dah switches
+    movwf   WPU                 ; Enable Weak Pull-Ups for dit and dah switches
+    bcf     OPTION_REG, NOT_GPPU
+
     banksel GPIO
+    movlw   0x07                ; Disable analog comparator
+    movwf   CMCON
 
     movlw 0x00                  ; Initialize the dit dah cycle counter
     movwf dit_dah_cycle
