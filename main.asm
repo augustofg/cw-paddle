@@ -10,11 +10,15 @@
     #define dit_paddle_gpio GPIO,dit_paddle_bit
     #define dah_paddle_gpio GPIO,dah_paddle_bit
 
+    #define CAN_SLEEP_NO  0
+    #define CAN_SLEEP_YES 1
+
     cblock 0x20
     w_save
     status_save
     pclath_save
     dit_dah_cycle
+    sleep_ctrl
     dit_cnt_l
     dit_cnt_h
     endc
@@ -30,15 +34,26 @@
     movf    PCLATH,w            ; move pclath register into w register
     movwf   pclath_save         ; save off contents of PCLATH register
 
+    btfss   INTCON, GPIF        ; If the interrupt was caused by GPIO change, disable it
+    goto    add_tmr1_cnt
+    bcf     INTCON, GPIE
+
+    movf    dit_cnt_l, w        ; Reload Timer 1 counter (force)
+    movwf   TMR1L
+    movf    dit_cnt_h, w
+    movwf   TMR1H
+    goto    add_tmr1_cnt_end
+add_tmr1_cnt:
+
+    movf    dit_cnt_l, w        ; Reload Timer 1 counter (add)
+    addwf   TMR1L, F
+    incf    TMR1H, F
+    movf    dit_cnt_h, w
+    addwf   TMR1H, F
+add_tmr1_cnt_end:
+
     banksel PIR1                ; Clear Timer 1 interrupt flag
     bcf     PIR1, TMR1IF
-
-    movf    dit_cnt_l, w        ; Reload Timer 1 counter
-    addwf   TMR1L,f
-    btfsc   STATUS, C
-    incf    TMR1H, f
-    movf    dit_cnt_h, w
-    addwf   TMR1H, f
 
     movlw   0
     xorwf   dit_dah_cycle, W
@@ -58,8 +73,16 @@
 
     xorlw   0
     btfss   STATUS, Z
+    goto    start_dit_dah
+    movlw   CAN_SLEEP_YES
+    movwf   sleep_ctrl
+    bcf     INTCON, GPIF        ; Clear GPIO interrupt flag and enable it
+    bsf     INTCON, GPIE
+    goto    end_dit_dah_fsm
+start_dit_dah:
+    movlw   CAN_SLEEP_NO
+    movwf   sleep_ctrl
     bsf     cw_key_gpio
-
     goto    end_dit_dah_fsm
 wait_dit_dah_finish:
     decfsz  dit_dah_cycle, F
@@ -78,9 +101,9 @@ end_dit_dah_fsm:
 
 main:
     banksel TRISIO
-    bcf cw_key_trisio
-    movlw (1 << TMR1IE)
-    movwf PIE1
+    bcf     cw_key_trisio       ; Define key control GPIO as an output
+    movlw   (1 << TMR1IE)       ; Enable timer1 overflow interrupt
+    movwf   PIE1
     movlw   (1 << dit_paddle_bit) | (1 << dah_paddle_bit)
     movwf   IOC                 ; Enable GPIO interrupt-on-change for the dit and dah switches
     movwf   WPU                 ; Enable Weak Pull-Ups for dit and dah switches
@@ -90,6 +113,8 @@ main:
     movlw   0x07                ; Disable analog comparator
     movwf   CMCON
 
+    movlw   CAN_SLEEP_NO        ; Initialize sleep_ctrl flag
+    movwf   sleep_ctrl
     movlw 0x00                  ; Initialize the dit dah cycle counter
     movwf dit_dah_cycle
     bcf cw_key_gpio
@@ -113,6 +138,12 @@ main:
     movwf T1CON
 
 stop:
+    movf    sleep_ctrl, W
+    xorlw   CAN_SLEEP_YES
+    btfsc   STATUS, Z
+    nop                         ; Should be a sleep instruction here,
+                                ; but it seems that the wake-up is
+                                ; taking too long
     goto stop
 
 wpm_to_dit_cycles_table:        ; 0x10000 - cycles, little endian, Fosc = 32.768 kHz
