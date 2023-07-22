@@ -29,6 +29,9 @@
     #define CAN_SLEEP_NO  0
     #define CAN_SLEEP_YES 1
 
+    #define DEFAULT_WPM 8
+    #define DEFAULT_WPM_IDX (DEFAULT_WPM - 5) * 2
+
     cblock 0x20
     w_save
     status_save
@@ -140,13 +143,13 @@ main:
 
     bcf     cw_key_gpio         ; CW key should start in OFF
 
-    movlw   0x12
+    movlw   DEFAULT_WPM_IDX
     call    wpm_to_dit_cycles_table
     banksel TMR1L
     movwf   dit_cnt_l
     movwf   TMR1L
 
-    movlw   0x13
+    movlw   (DEFAULT_WPM_IDX + 1)
     call    wpm_to_dit_cycles_table
     banksel TMR1H
     movwf   dit_cnt_h
