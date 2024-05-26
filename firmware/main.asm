@@ -29,8 +29,8 @@
     #define CAN_SLEEP_NO  0
     #define CAN_SLEEP_YES 1
 
-    #define DEFAULT_WPM 8
-    #define DEFAULT_WPM_IDX (DEFAULT_WPM - 5) * 2
+    #define DEFAULT_WPM D'15'
+    #define DEFAULT_WPM_IDX (DEFAULT_WPM - D'5') * D'2'
 
     cblock 0x20
     w_save
