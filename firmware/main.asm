@@ -122,9 +122,9 @@ end_dit_dah_fsm:
     retfie
 
 main:
-    banksel TRISIO
     call    0x3FF               ; Load and apply internal OSC callibration
-    movwf   OSCAL
+    banksel TRISIO
+    movwf   OSCCAL
     bcf     cw_key_trisio       ; Define key control GPIO as an output
     movlw   (1 << TMR1IE)       ; Enable timer1 overflow interrupt
     movwf   PIE1
