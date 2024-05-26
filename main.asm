@@ -17,7 +17,7 @@
     list p=12f629
     #include <p12f629.inc>
 
-    __CONFIG _CONFIG, _LP_OSC & _WDT_OFF & _MCLRE_OFF & _BOREN_ON & _CP_OFF & _CPD_OFF & _PWRTE_OFF
+    __CONFIG _CONFIG, _INTRC_OSC_NOCLKOUT & _WDT_OFF & _MCLRE_OFF & _BOREN_ON & _CP_OFF & _CPD_OFF & _PWRTE_OFF
 
     #define cw_key_gpio GPIO,2
     #define cw_key_trisio TRISIO,2
@@ -123,6 +123,8 @@ end_dit_dah_fsm:
 
 main:
     banksel TRISIO
+    call    0x3FF               ; Load and apply internal OSC callibration
+    movwf   OSCAL
     bcf     cw_key_trisio       ; Define key control GPIO as an output
     movlw   (1 << TMR1IE)       ; Enable timer1 overflow interrupt
     movwf   PIE1
@@ -158,7 +160,8 @@ main:
     bcf     PIR1, TMR1IF
     movlw   (1 << PEIE) | (1 << GIE)
     movwf   INTCON
-    movlw   (1 << TMR1ON)
+    ;; Configure Timer1 with a 1/4 pre-escaler
+    movlw   (1 << TMR1ON) | (1 << T1CKPS1) | (0 << T1CKPS1)
     movwf   T1CON
 
 stop:
@@ -170,43 +173,43 @@ stop:
                                 ; taking too long
     goto    stop
 
-wpm_to_dit_cycles_table:        ; 0x10000 - cycles, little endian, Fosc = 32.768 kHz
+wpm_to_dit_cycles_table:        ; 0x10000 - cycles, little endian, Fosc = 4 MHz
     addwf PCL, F
-    dt 0x52, 0xf8 ; 5 wpm
-    dt 0x9a, 0xf9 ; 6 wpm
-    dt 0x84, 0xfa ; 7 wpm
-    dt 0x33, 0xfb ; 8 wpm
-    dt 0xbc, 0xfb ; 9 wpm
-    dt 0x29, 0xfc ; 10 wpm
-    dt 0x82, 0xfc ; 11 wpm
-    dt 0xcd, 0xfc ; 12 wpm
-    dt 0x0c, 0xfd ; 13 wpm
-    dt 0x42, 0xfd ; 14 wpm
-    dt 0x71, 0xfd ; 15 wpm
-    dt 0x9a, 0xfd ; 16 wpm
-    dt 0xbe, 0xfd ; 17 wpm
-    dt 0xde, 0xfd ; 18 wpm
-    dt 0xfb, 0xfd ; 19 wpm
-    dt 0x14, 0xfe ; 20 wpm
-    dt 0x2c, 0xfe ; 21 wpm
-    dt 0x41, 0xfe ; 22 wpm
-    dt 0x55, 0xfe ; 23 wpm
-    dt 0x66, 0xfe ; 24 wpm
-    dt 0x77, 0xfe ; 25 wpm
-    dt 0x86, 0xfe ; 26 wpm
-    dt 0x94, 0xfe ; 27 wpm
-    dt 0xa1, 0xfe ; 28 wpm
-    dt 0xad, 0xfe ; 29 wpm
-    dt 0xb8, 0xfe ; 30 wpm
-    dt 0xc3, 0xfe ; 31 wpm
-    dt 0xcd, 0xfe ; 32 wpm
-    dt 0xd6, 0xfe ; 33 wpm
-    dt 0xdf, 0xfe ; 34 wpm
-    dt 0xe7, 0xfe ; 35 wpm
-    dt 0xef, 0xfe ; 36 wpm
-    dt 0xf6, 0xfe ; 37 wpm
-    dt 0xfd, 0xfe ; 38 wpm
-    dt 0x04, 0xff ; 39 wpm
-    dt 0x0a, 0xff ; 40 wpm
+    dt 0xA0, 0x15 ; 60000 cycles, 5 wpm
+    dt 0xB0, 0x3C ; 50000 cycles, 6 wpm
+    dt 0x97, 0x58 ; 42857 cycles, 7 wpm
+    dt 0x84, 0x6D ; 37500 cycles, 8 wpm
+    dt 0xCB, 0x7D ; 33333 cycles, 9 wpm
+    dt 0xD0, 0x8A ; 30000 cycles, 10 wpm
+    dt 0x77, 0x95 ; 27273 cycles, 11 wpm
+    dt 0x58, 0x9E ; 25000 cycles, 12 wpm
+    dt 0xDB, 0xA5 ; 23077 cycles, 13 wpm
+    dt 0x4B, 0xAC ; 21429 cycles, 14 wpm
+    dt 0xE0, 0xB1 ; 20000 cycles, 15 wpm
+    dt 0xC2, 0xB6 ; 18750 cycles, 16 wpm
+    dt 0x11, 0xBB ; 17647 cycles, 17 wpm
+    dt 0xE5, 0xBE ; 16667 cycles, 18 wpm
+    dt 0x53, 0xC2 ; 15789 cycles, 19 wpm
+    dt 0x68, 0xC5 ; 15000 cycles, 20 wpm
+    dt 0x32, 0xC8 ; 14286 cycles, 21 wpm
+    dt 0xBC, 0xCA ; 13636 cycles, 22 wpm
+    dt 0x0D, 0xCD ; 13043 cycles, 23 wpm
+    dt 0x2C, 0xCF ; 12500 cycles, 24 wpm
+    dt 0x20, 0xD1 ; 12000 cycles, 25 wpm
+    dt 0xEE, 0xD2 ; 11538 cycles, 26 wpm
+    dt 0x99, 0xD4 ; 11111 cycles, 27 wpm
+    dt 0x26, 0xD6 ; 10714 cycles, 28 wpm
+    dt 0x97, 0xD7 ; 10345 cycles, 29 wpm
+    dt 0xF0, 0xD8 ; 10000 cycles, 30 wpm
+    dt 0x33, 0xDA ; 9677 cycles, 31 wpm
+    dt 0x61, 0xDB ; 9375 cycles, 32 wpm
+    dt 0x7D, 0xDC ; 9091 cycles, 33 wpm
+    dt 0x88, 0xDD ; 8824 cycles, 34 wpm
+    dt 0x85, 0xDE ; 8571 cycles, 35 wpm
+    dt 0x73, 0xDF ; 8333 cycles, 36 wpm
+    dt 0x54, 0xE0 ; 8108 cycles, 37 wpm
+    dt 0x29, 0xE1 ; 7895 cycles, 38 wpm
+    dt 0xF4, 0xE1 ; 7692 cycles, 39 wpm
+    dt 0xB4, 0xE2 ; 7500 cycles, 40 wpm
 
     end
