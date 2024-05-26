@@ -19,10 +19,10 @@
 
     __CONFIG _CONFIG, _LP_OSC & _WDT_OFF & _MCLRE_OFF & _BOREN_ON & _CP_OFF & _CPD_OFF & _PWRTE_OFF
 
-    #define cw_key_gpio GPIO,0
-    #define cw_key_trisio TRISIO,0
+    #define cw_key_gpio GPIO,2
+    #define cw_key_trisio TRISIO,2
     #define dit_paddle_bit 1
-    #define dah_paddle_bit 2
+    #define dah_paddle_bit 0
     #define dit_paddle_gpio GPIO,dit_paddle_bit
     #define dah_paddle_gpio GPIO,dah_paddle_bit
 
