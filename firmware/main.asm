@@ -32,6 +32,10 @@
     #define DEFAULT_WPM D'15'
     #define DEFAULT_WPM_IDX (DEFAULT_WPM - D'5') * D'2'
 
+    #define ELEMENT_IDLE D'0'
+    #define ELEMENT_DIT D'1'
+    #define ELEMENT_DAH D'2'
+
     cblock 0x20
     w_save
     status_save
@@ -40,6 +44,10 @@
     sleep_ctrl
     dit_cnt_l
     dit_cnt_h
+    curr_element
+    next_element
+    last_gpio_state
+    button_press_event
     endc
 
     org 0x0000
@@ -55,16 +63,98 @@
 
     banksel INTCON
 
-    btfss   INTCON, GPIF        ; If the interrupt was caused by GPIO change, disable it
-    goto    add_tmr1_cnt
-    bcf     INTCON, GPIE
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; GPIO Change interrupt
+    btfss   INTCON, GPIF
+    goto    end_gpio_change_int
+    bcf     INTCON, GPIF        ; Clear GPIO change interrupt flag
+    bcf     INTCON, GPIE        ; Disable GPIO change interrupt, this will be
+                                ; re-enabled later on the timer interrupt (debounce)
 
-    movf    dit_cnt_l, w        ; Reload Timer 1 counter (force)
+    movf    GPIO, W             ; Detect if a button was pressed, ignore button
+    xorwf   last_gpio_state, W  ; release events
+    andwf   last_gpio_state, W
+    xorlw   0xFF
+    andlw   (1 << dit_paddle_bit) | (1 << dah_paddle_bit)
+    movwf   button_press_event
+    xorlw   (1 << dit_paddle_bit) | (1 << dah_paddle_bit)
+    btfsc   STATUS, Z           ; If no button were pressed down, returns from
+    goto    interrupt_return    ; the interrupt (i.e. ignore release events)
+
+    movf    GPIO, W
+    movwf   last_gpio_state
+
+    movf    curr_element, W     ; Check if the element state machine is idle
+    xorlw   ELEMENT_IDLE
+    btfss   STATUS, Z
+    goto    end_check_idle
+    ;; If yes, then update the current state depending on what paddle
+    ;; is pressed
+    btfss   button_press_event, dit_paddle_bit
+    goto    end_dit_paddle_test
+    movlw   D'1'
+    movwf   dit_dah_cycle
+    movlw   ELEMENT_DIT
+end_dit_paddle_test:
+
+    btfss   button_press_event, dah_paddle_bit
+    goto    end_dah_paddle_test
+    movlw   D'3'
+    movwf   dit_dah_cycle
+    movlw   ELEMENT_DAH
+end_dah_paddle_test:
+
+    movwf   curr_element        ; Update the curr_element state
+    movlw   ELEMENT_IDLE        ; Just to keep consistency, set next_element to idle.
+    movwf   next_element
+
+    bsf     cw_key_gpio         ; Key down
+
+    movf    dit_cnt_l, w        ; Load Timer 1 counter
     movwf   TMR1L
     movf    dit_cnt_h, w
     movwf   TMR1H
-    goto    add_tmr1_cnt_end
-add_tmr1_cnt:
+    bsf     T1CON, TMR1ON       ; Enable timer 1
+    goto    interrupt_return
+end_check_idle:                 ; Else
+
+    ;; If curr_element is not idle, and both paddles are
+    ;; pressed, then next_element should be a the oposite
+    ;; element.
+    btfss   button_press_event, dit_paddle_bit
+    goto    end_both_pressed
+    btfss   button_press_event, dah_paddle_bit
+    goto    end_both_pressed
+
+    movf    curr_element, W
+    xorlw   ELEMENT_DAH
+    btfss   STATUS, Z
+    goto    end_load_dit_next
+    movlw   ELEMENT_DIT
+    movwf   next_element
+end_load_dit_next:
+
+    movf    curr_element, W
+    xorlw   ELEMENT_DIT
+    btfss   STATUS, Z
+    goto    end_load_dah_next
+    movlw   ELEMENT_DAH
+    movwf   next_element
+end_load_dah_next:              ; Else
+end_both_pressed:
+
+    ;; Next element should be a dit or a dah based on the last pressed
+    ;; paddle
+    btfsc   button_press_event, dit_paddle_bit
+    movlw   ELEMENT_DIT
+    btfsc   button_press_event, dah_paddle_bit
+    movlw   ELEMENT_DAH
+
+    movwf   next_element
+
+    goto    interrupt_return
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+end_gpio_change_int:
 
     banksel TMR1L
     movf    dit_cnt_l, w        ; Reload Timer 1 counter (add)
@@ -74,18 +164,73 @@ add_tmr1_cnt:
     addwf   TMR1H, F
 add_tmr1_cnt_end:
 
+    bcf     INTCON, GPIF        ; Clear GPIO change interrupt flag
+    bsf     INTCON, GPIE        ; Re-enable GPIO change interrupt
+
     bcf     PIR1, TMR1IF        ; Clear Timer 1 interrupt flag
 
-    movlw   0
+    movlw   0                   ; End of element
     xorwf   dit_dah_cycle, W
     btfss   STATUS, Z
     goto    wait_dit_dah_finish
     bcf     cw_key_gpio
 
+    movf    next_element, W     ; If next element is DIT, load 1 cycle
+    xorlw   ELEMENT_DIT
+    btfss   STATUS, Z
+    goto    end_check_next_dit
+
+    movf    next_element, W     ; Copy next_element to curr_element and set
+    movwf   curr_element        ; next_element to IDLE
+    movlw   ELEMENT_IDLE
+    movwf   next_element
+
+    movlw   D'1'
+    movwf   dit_dah_cycle
+    bsf     cw_key_gpio         ; Key down
+    goto    end_dit_dah_fsm
+end_check_next_dit:
+
+    movf    next_element, W     ; Else if next element is DAH, load 3 cycles
+    xorlw   ELEMENT_DAH
+    btfss   STATUS, Z
+    goto    end_check_next_dah
+
+    movf    next_element, W     ; Copy next_element to curr_element and set
+    movwf   curr_element        ; next_element to IDLE
+    movlw   ELEMENT_IDLE
+    movwf   next_element
+
+    movlw   D'3'
+    movwf   dit_dah_cycle
+    bsf     cw_key_gpio         ; Key down
+    goto    end_dit_dah_fsm
+end_check_next_dah:
     movlw   0
 
-    btfss   dit_paddle_gpio
+    btfss   dit_paddle_gpio     ; If the 'dit' paddle is pressed, load
+    movlw   1                   ; 1 cycle
+
+    btfsc   dah_paddle_gpio     ; If the 'dah' paddle is pressed, check if
+    goto    end_check_dah_gpio  ; the 'dit' paddle is also pressed
+    btfsc   dit_paddle_gpio     ;
+    goto    end_check_both_pressed
+    movf    curr_element, W
+    xorlw   ELEMENT_DIT
+
+end_check_both_pressed:
+    movlw   ELEMENT_DAH
+    movwf   curr_element
+    movlw   3
+end_check_dah_gpio:
+end_handle_next:
+
+
+    btfsc   dit_paddle_gpio
+    goto    check_dit_gpio_end
     movlw   1
+    btfss   dah_paddle_gpio
+check_dit_gpio_end:
 
     btfss   dah_paddle_gpio
     movlw   3
@@ -97,9 +242,8 @@ add_tmr1_cnt_end:
     goto    start_dit_dah
     movlw   CAN_SLEEP_YES
     movwf   sleep_ctrl
-    bcf     INTCON, GPIF        ; Clear GPIO interrupt flag and enable it
-    bsf     INTCON, GPIE
     goto    end_dit_dah_fsm
+
 start_dit_dah:
     banksel sleep_ctrl
     movlw   CAN_SLEEP_NO
@@ -113,6 +257,7 @@ wait_dit_dah_finish:
     bcf     cw_key_gpio
 end_dit_dah_fsm:
 
+interrupt_return:
     movf    pclath_save,w       ; retrieve copy of PCLATH register
     movwf   PCLATH              ; restore pre-isr PCLATH register contents
     movf    status_save,w       ; retrieve copy of STATUS register
@@ -137,6 +282,10 @@ main:
     movlw   0x07                ; Disable analog comparator
     movwf   CMCON
 
+    movlw   ELEMENT_IDLE        ; Start in IDLE
+    movwf   curr_element
+    movwf   next_element
+
     movlw   CAN_SLEEP_NO        ; Initialize sleep_ctrl flag
     movwf   sleep_ctrl
 
@@ -145,30 +294,32 @@ main:
 
     bcf     cw_key_gpio         ; CW key should start in OFF
 
+    movf    GPIO, W             ; Initialize the last GPIO state
+    movwf   last_gpio_state
+
     movlw   DEFAULT_WPM_IDX
     call    wpm_to_dit_cycles_table
-    banksel TMR1L
+    ASSUME  dit_cnt_l
     movwf   dit_cnt_l
-    movwf   TMR1L
 
     movlw   (DEFAULT_WPM_IDX + 1)
     call    wpm_to_dit_cycles_table
-    banksel TMR1H
+    ASSUME  dit_cnt_h
     movwf   dit_cnt_h
-    movwf   TMR1H
 
-    bcf     PIR1, TMR1IF
     movlw   (1 << PEIE) | (1 << GIE)
     movwf   INTCON
-    ;; Configure Timer1 with a 1/4 pre-escaler
-    movlw   (1 << TMR1ON) | (1 << T1CKPS1) | (0 << T1CKPS1)
+
+    ;; Configure Timer1 with a 1/4 pre-escaler, don't enable it yet
+    movlw   (0 << TMR1ON) | (1 << T1CKPS1) | (0 << T1CKPS1)
     movwf   T1CON
+    bcf     PIR1, TMR1IF
 
 stop:
     movf    sleep_ctrl, W
     xorlw   CAN_SLEEP_YES
     btfsc   STATUS, Z
-    nop                         ; Should be a sleep instruction here,
+    sleep                       ; Should be a sleep instruction here,
                                 ; but it seems that the wake-up is
                                 ; taking too long
     goto    stop
