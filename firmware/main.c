@@ -162,10 +162,8 @@ static void irq_handler(void) __interrupt(0) {
 				curr_element = next_element;
 				next_element = Idle;
 				if (curr_element == ElementDit) {
-					curr_element = ElementDit;
 					dit_dah_cnt = 1;
 				} else {
-					curr_element = ElementDah;
 					dit_dah_cnt = 3;
 				}
 				cw_key_gpio = 1;
