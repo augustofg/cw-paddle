@@ -66,19 +66,17 @@ static void irq_handler(void) __interrupt(0) {
 
 	if (INTCONbits.GPIF == 1) { // GPIO change interrupt
 		/*
+		 * Clear GPIO interrupt change flag
+		 */
+		INTCONbits.GPIF = 0;
+
+		/*
 		 * Detect if this is a paddle press event, we should ignore
 		 * release events
 		 */
 		button_pressed = ~(~(GPIO ^ prev_gpio) | GPIO);
 		prev_gpio = GPIO;
 		if (button_pressed != 0) {
-			/*
-			 * Clear GPIO interrupt change flag, disable it now and only
-			 * enable it later after a few ms for debouncing
-			 */
-			INTCONbits.GPIF = 0;
-			INTCONbits.GPIE = 0;
-
 			if (curr_element == Idle) {
 				if ((button_pressed & (1 << dit_paddle_pin)) != 0) {
 					dit_dah_cnt = 1;
@@ -110,6 +108,11 @@ static void irq_handler(void) __interrupt(0) {
 				 */
 				next_element = Idle;
 			} else {
+				/*
+				 * Only add a new element to the queue if it is
+				 * different from the current element, in this way we
+				 * don't need debouncing the inputs
+				 */
 				if ((button_pressed & (1 << dit_paddle_pin)) != 0 &&
 					curr_element != ElementDit) {
 					next_element = ElementDit;
@@ -126,8 +129,6 @@ static void irq_handler(void) __interrupt(0) {
 		TMR1L = dit_cycs & 0xFF;
 		TMR1H = (dit_cycs >> 8) & 0xFF;
 		PIR1bits.TMR1IF = 0;
-		INTCONbits.GPIE = 1;
-		INTCONbits.GPIF = 0;
 
 		if (dit_dah_cnt == 1) {
 			/*
