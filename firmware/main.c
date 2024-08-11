@@ -210,7 +210,12 @@ void main(void)
 	INTCONbits.PEIE = 1;
 	INTCONbits.GIE = 1;
 
-	__asm__("sleep\n");
 	for(;;) {
+		/*
+		 * If Timer 1 is inactive, sleep to save power
+		 */
+		if (T1CONbits.TMR1ON == 0) {
+			__asm__("sleep\n");
+		}
 	}
 }
