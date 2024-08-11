@@ -11,7 +11,7 @@
 #define dit_paddle_gpio GPIObits.GP1
 #define dah_paddle_gpio GPIObits.GP0
 
-__code uint16_t __at (_CONFIG) __configword = _INTRC_OSC_NOCLKOUT & _WDT_OFF & _MCLRE_OFF & _BOREN_ON & _CP_OFF & _CPD_OFF & _PWRTE_OFF;
+__code uint16_t __at (_CONFIG) __configword = _INTRC_OSC_NOCLKOUT & _WDT_OFF & _MCLRE_OFF & _BOREN_OFF & _CP_OFF & _CPD_OFF & _PWRTE_OFF;
 
 const uint16_t wpm_dit_time_table[36] = {
 	0x15A0,
